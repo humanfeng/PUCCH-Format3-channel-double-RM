@@ -1,0 +1,387 @@
+%Name：PUCCH channel estimation
+%Time：2010-10-19
+%Author：Songhaibei
+%=====================================================================
+%本次仿真PUCCH 链路信道估计,频域上取1个资源块,子载波间隔deltaf=15kHz
+%由于传输时以子帧为单位的,所以仿真时时域上取一个子帧,即两个时隙
+%对于普通CP,一个时隙中的第一个符号CP=160,其余符号CP=144
+%子载波subcarrier之间的导频间隔为0,即频域上导频连续排放,所以只做时域插值,频域不需要
+%取14个SC-FDMA符号,一个ofdm符号长度为1/14ms.
+%采用QPSK和PUCCH格式2b专用QPSK混合调制
+%模型：1发2收
+clc;
+clear all;
+close all;
+clc;
+clear all;
+global SYMBOL_L_SEQ;
+global SYMBOL_L_SEQ_2;
+global CPflag;
+global Delta_PUCCH_shift;
+global n_1_PUCCH;
+global PUCCHN_1_cs;
+global N_RB_sc;
+global N_cell_ID;
+global n_RNTI;
+global n_2_PUCCH;
+global N_2_RB;
+global input_d_10;
+global pucch_type;
+global N_ULRB;
+global subframe_N ;
+global CPflag;
+global n_2_PUCCH;
+global ackNackSRS_SimuTran;%是否允许同时发送PUCCH与SRS
+global in_dft_1;
+% load ('in_DFT1.mat'); 
+real=textread('PUCCH_real.dat','%s');
+image=textread('PUCCH_image.dat','%s');
+data_pucch_1=CCSdata2MATLABdata(real,image);
+data_pucch_1=reshape(data_pucch_1,1,30720);
+xx=zeros(1,530);
+yy=data_pucch_1(1,1:30190);
+data_pucch=[xx,yy];
+SYMBOL_L_SEQ = [0 1 5 6;0 1 4 5];%在1/1a/1b情况下，常规/扩展CP需要计算的符号数
+SYMBOL_L_SEQ_2 = [0 2 3 4 6;0 1 2 4 5 ];%在2/2a/2b情况下，常规/扩展CP需要计算的符号数
+CPflag = 0;
+N_ULRB = 25;
+Delta_PUCCH_shift = 2;         %与发送端TxDelta_PUCCH_shift一样
+ n_1_PUCCH = 1;                    %用于传输PUCCH格式1/1a/1b的非负资源序号          
+PUCCHN_1_cs = 6;                %表示1/1a/1b与2/2a/2b混合使用时，格式1/1a/1b 中的循环移位数  
+N_RB_sc = 12;                       %频域上资源块的大小，子载波数
+N_cell_ID = 0;
+n_RNTI = 4097;
+N_2_RB = 2;                         %每一个时隙中预留给PUCCH格式2/2a/2b传输的资源块数目
+% n_2_PUCCH = 100;                %用于传输PUCCH格式2/2a/2b的非负资源序号                     
+Deta_ss = 0;                           %由高层给定，用于求PUSCH基序列移位模式（sequence-shift pattern）
+N_PUCCH_seq=12;
+M_RS_sc = N_PUCCH_seq;        %PUCCH的DMRS生成
+Group_hopping_enabled = 1;       %用于决定序列是否组跳频
+Sequence_hopping_enabled = 0; %用于决定是否序列跳频
+subframe_N = 7;
+ackNackSRS_SimuTran=0;
+pucch_type =3;                          %1/1a/1b/2/2a/2b=0/1/2/3/4/5 
+pucch_type3=6;
+%--------------------------------------------------------------------
+
+  if pucch_type < 3                  %格式1/1a/1b 
+    bit_sourse = [ 1  0];                    %假设，bit_sourse = [0 1];
+    numbits = length(bit_sourse);
+%     ackNackSRS_SimuTran = 0;%只在1/1a/1b 情况下可能传送SRS
+    symbol = PUCCHformat1(bit_sourse,N_cell_ID,n_RNTI,subframe_N,pucch_type,ackNackSRS_SimuTran);
+    reference = PUCCHDMRSformat1(pucch_type,N_cell_ID,n_RNTI,subframe_N);   %1/1a/1bDMRS生成 
+  else                                      %格式2/2a/2b
+    bit_sourse = [1 1];    %假设                    
+    input_d_10 = [ 1 ];                %格式2b
+    ackNackSRS_SimuTran = 0;%只在1/1a/1b 情况下可能传送SRS
+    bit_sourse1 = RM20encode(bit_sourse);  %调用RM20编码（输入数据个数<=13）
+    symbol = PUCCHformat2(bit_sourse1,N_cell_ID,n_RNTI,subframe_N);   %控制信息生成
+    [reference DMRS_1 DMRS_10] = PUCCHDMRSformat2(pucch_type,N_cell_ID,n_RNTI,subframe_N);   %2/2a/2bDMRS生成
+    
+  end
+  
+
+   bit_sourse3 = [1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1];
+   numbits = length(bit_sourse3);
+   if(numbits<=11)
+     RM_bit_sourse3=TxRM3211(bit_sourse,32);  %调用RM32编码（输入数据个数<=11）
+     B=4*N_RB_sc;
+     for ii = 1:B
+        RM_bit_sourse3_cycle(ii)=RM_bit_sourse3(ii%32);
+     end
+   elseif(numbits>11&&numbits<=21)
+       numbits1=ceil(numbits/2);
+       bit_sourse3_part1=bit_sourse3(1:numbits1);
+       bit_sourse3_part2=bit_sourse3(numbits1+1:numbits);
+       RM_bit_part1=TxRM3211(bit_sourse3_part1,24);  %调用RM32编码（输入数据个数<=11）
+       RM_bit_part2=TxRM3211(bit_sourse3_part2,24);  %调用RM32编码（输入数据个数<=11）
+       B=4*N_RB_sc;
+       jj=1;
+       for ii = 1:4:B
+         RM_bit_sourse3_cycle(ii)=RM_bit_part1(jj);
+         RM_bit_sourse3_cycle(ii)=RM_bit_part1(jj+1);
+         RM_bit_sourse3_cycle(ii)=RM_bit_part2(jj);
+         RM_bit_sourse3_cycle(ii)=RM_bit_part2(jj+1);
+         jj=jj+2;
+       end
+   end
+%%PUCCH3加扰
+    symbol3 = PUCCHformat3(RM_bit_sourse3_cycle,N_cell_ID,n_RNTI,subframe_N);   %控制信息生成
+    reference3 = PUCCHDMRSformat3(pucch_type,N_cell_ID,n_RNTI,subframe_N);   %3DMRS生成
+    [pilot_sequence3,inter_pilot_out3] = inter_pilot(reference3,pucch_type3);%在一个全零的12*14的矩阵中插入DMRS
+    symbol_sourse3 = data_map(inter_pilot_out3,symbol3);%12*14矩阵,按照从上往下的顺序映射
+    scfdma_signal3 = basesignalgen(symbol_sourse3);%利用ifft,SC-FDMA基带信号生成2048*14 
+    scfdma3_reshape = reshape(scfdma_signal3,1,2048*14); %并串转换1* 28672     
+    scfdma_cpout3 = insert_cp(scfdma3_reshape);%加CP之后,形成1行，30720列(=28672+2048)的矩阵   
+
+%=======================================================
+ [pilot_sequence,inter_pilot_out] = inter_pilot(reference,pucch_type);%在一个全零的12*14的矩阵中插入DMRS
+ symbol_sourse = data_map(inter_pilot_out,symbol);%12*14矩阵,按照从上往下的顺序映射
+ %symbol_sourse1=flipud(symbol_sourse);
+ symbol_sourse1=reshape(symbol_sourse,1,300*14);
+%  symbol_sourse2=matlabdata_to_softdata(symbol_sourse1,length(symbol_sourse1)); 
+ scfdma_signal = basesignalgen(symbol_sourse);%利用ifft,SC-FDMA基带信号生成2048*14 
+ scfdma_reshape = reshape(scfdma_signal,1,2048*14); %并串转换1* 28672     
+ scfdma_cpout = insert_cp(scfdma_reshape);%加CP之后,形成1行，30720列(=28672+2048)的矩阵
+ %--------------------------归一化-----------------------------
+ % scfdma_cpout = scfdma_cpout/max(abs(scfdma_cpout)); 
+ %-------------------------------------------------------------
+ SNR_dB=-10:0;
+ for ii = 1:length(SNR_dB)
+   n_ack=0;
+%  k1_cqi=0;
+ for numm = 1:1000                      %每一个SNR值计算5次，以增大数据量
+    k_ack=0;
+ % %************************************多径+噪声***********************************
+  chan1=rayleighchan((1/30.72)*10^(-6),5,[0,30e-9,70e-9,90e-9,110e-9,190e-9,410e-9],[0,-1,-2,-3,-8,-17.2,-20.8]);%EPA5
+% chan3=rayleighchan((1/30.72)*10^(-6),300,[0,30e-9,150e-9,310e-9,370e-9,710e-9,1090e-9,1730e-9,2510e-9],[0,-1.5,-1.4,-3.6,-0.6,-9.1,-7.0,-12.0,-16.9]);
+% % chan4=rayleighchan((1/30.72)*10^(-6),5,[0,50e-9,120e-9,200e-9,230e-9,500e-9,1600e-9,2300e-9],[-1,-1,-1,0,0,0,-3,-5]);
+% 
+  filout1 = filter(chan1,scfdma_cpout);
+  filout2 = filter(chan1,scfdma_cpout); %经过2个随机EPA5，产生2个不同的接收信号
+ scfdma_cpout_1 = filout1/max(abs(filout1));
+ scfdma_cpout_2 = filout2/max(abs(filout2));
+ sym_addnoise1 = awgn(scfdma_cpout_1,0);
+ sym_addnoise2 = awgn(scfdma_cpout_2,SNR_dB(ii)); %1*30720
+   %***********************PUCCH3多径+噪声***************************************************
+     filout1_3 = filter(chan1,scfdma_cpout3);
+     filout2_3 = filter(chan1,scfdma_cpout3); %经过2个随机EPA5，产生2个不同的接收信号
+     scfdma_cpout_1_3 = filout1_3/max(abs(filout1_3));
+     scfdma_cpout_2_3 = filout2_3/max(abs(filout2_3));
+     sym_addnoise1_3 = awgn(scfdma_cpout_1_3,0);
+     sym_addnoise2_3 = awgn(scfdma_cpout_2_3,SNR_dB(ii)); %1*30720
+   %**************************************************************************
+%**************************************************************************
+
+scfdma_cutcp1 = cut_cp(sym_addnoise1);              %去除CP,2048*14行  
+scfdma_cutcp2 = cut_cp(sym_addnoise2);              %去除CP,2048*14行  
+scfdma_rec1 = reshape(scfdma_cutcp1,2048,14);        %串并转换
+scfdma_rec2 = reshape(scfdma_cutcp2,2048,14);        %串并转换
+descfdma1 = de_basesignalgen(scfdma_rec1);      %运用FFT进行ofdm解调12*14的矩阵  
+descfdma2 = de_basesignalgen(scfdma_rec2);      %运用FFT进行ofdm解调12*14的矩阵  
+descfdma=(descfdma1+descfdma2)/2;
+descfdma_1=reshape(descfdma,1,300*14);
+descfdma_2=matlabdata_to_softdata(descfdma_1,300*14); %转换成Q15量化的值
+  %*****************************PUCCH3*********************************************
+scfdma_cutcp1_3 = cut_cp(sym_addnoise1_3);              %去除CP,2048*14行  
+scfdma_cutcp2_3 = cut_cp(sym_addnoise2_3);              %去除CP,2048*14行  
+scfdma_rec1_3 = reshape(scfdma_cutcp1_3,2048,14);        %串并转换
+scfdma_rec2_3 = reshape(scfdma_cutcp2_3,2048,14);        %串并转换
+descfdma1_3 = de_basesignalgen(scfdma_rec1_3);      %运用FFT进行ofdm解调12*14的矩阵  
+descfdma2_3 = de_basesignalgen(scfdma_rec2_3);      %运用FFT进行ofdm解调12*14的矩阵  
+descfdma3=(descfdma1_3+descfdma2_3)/2;
+descfdma_1_3=reshape(descfdma3,1,300*14);
+descfdma_2_3=matlabdata_to_softdata(descfdma_1_3,300*14); %转换成Q15量化的值
+  %**************************************************************************
+
+%=======================信道估计+均衡====================
+[H_pls1,re_data1] = h_pls(descfdma,pilot_sequence); %%信道估计
+H_ls1 = linear_inter(re_data1,H_pls1);%采用ls的插值 
+equ_data_ls1 = ZF_equation(re_data1,H_ls1);%信道均衡
+equ_data_ls=flipdim(equ_data_ls1,1);
+equ_data_ls2 = reshape(equ_data_ls,1,96);
+ %****************************PUCCH3**********************************************
+ [H_pls1_3,re_data1_3] = h_pls(descfdma3,pilot_sequence3); %%信道估计
+ H_ls1_3 = linear_inter(re_data1_3,H_pls1_3);%采用ls的插值 
+ equ_data_ls1_3 = ZF_equation(re_data1_3,H_ls1_3);%信道均衡
+ equ_data_ls_3=flipdim(equ_data_ls1_3,1);
+ equ_data_ls2_3 = reshape(equ_data_ls_3,1,96);
+ 
+ %**************************************************************************
+ %%%%%%%%%%%%%%%%%%%%%%%解CQI的复值符号%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ if pucch_type < 3                  %格式1/1a/1b 
+   Rxinput_b = dePUCCHformat1(equ_data_ls2,N_cell_ID,n_RNTI,subframe_N,pucch_type);
+ else
+  Rxinput_rm_b = dePUCCHformat2(equ_data_ls2,N_cell_ID,n_RNTI,subframe_N);
+  Rxinput_rm_b = 1 - 2*Rxinput_rm_b;            %RM译码需要双极性化
+  Rxinput_b = FHTrmdecode(Rxinput_rm_b);  % RM译码
+  bit_sourse
+ end
+  %%%%%%%%%%%%%%%%%%%%%%%解pucch3的复值符号%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ if pucch_type3==6 
+  Rxinput_rm_b3 = dePUCCHformat3(equ_data_ls2_3,N_cell_ID,n_RNTI,subframe_N);
+  Rxinput_rm_b3 = 1 - 2*Rxinput_rm_b3;            %RM译码需要双极性化
+  Rxinput_b3 = FHTrmdecode(Rxinput_rm_b3);  % RM译码
+  bit_sourse3
+ end
+
+%%%%%%%%%%%%%%%%%%%%%%统计CQI的误比特率%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % k_cqi=0;
+    
+ for i=1:length(bit_sourse)
+     if Rxinput_b(i)==bit_sourse(i)
+        k_ack=k_ack+1;
+      end
+ end
+ 
+
+  if k_ack==length(bit_sourse);
+     n_ack=n_ack+1;
+  end  
+
+%%%%%%%%%%%%%%%%%%%%%%统计pucch3的误比特率%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % k_cqi=0;
+%两个载波
+ for i=1:8
+     if Rxinput_b3(i)==bit_sourse3(i)
+        k_ack3_2=k_ack3_5+1;
+     end
+ end
+ if k_ack3_2==8;
+     n_ack3_2=n_ack3+1;
+ end
+ 
+%3个载波     
+ for i=1:12
+     if Rxinput_b3(i)==bit_sourse3(i)
+        k_ack3_3=k_ack3_3+1;
+     end
+ end
+ if k_ack3_3==12;
+     n_ack3_3=n_ack3_3+1;
+ end
+
+%4个载波
+ for i=1:16
+     if Rxinput_b3(i)==bit_sourse3(i)
+        k_ack3_4=k_ack3_4+1;
+     end
+ end
+ if k_ack3_4==16;
+     n_ack3_4=n_ack4+1;
+ end
+ 
+%5个载波
+ for i=1:length(bit_sourse3)
+     if Rxinput_b3(i)==bit_sourse3(i)
+        k_ack3_5=k_ack3_5+1;
+     end
+ end
+ if k_ack3_5==length(bit_sourse3);
+     n_ack3_5=n_ack3_5+1;
+ end      
+end
+%%%%%%%%%%%%%%%%%%%%%%统计CQI的吞吐量%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % k_cqi=0;
+    
+ for i=1:length(bit_sourse)
+     if Rxinput_b(i)==bit_sourse(i)
+        sum_ack=sum_ack+1;
+      end
+ end
+
+%%%%%%%%%%%%%%%%%%%%%%统计pucch3的吞吐量%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% k_cqi=0;
+%两个载波
+ for i=1:8
+     if Rxinput_b3(i)==bit_sourse3(i)
+        sum_ack3_2=sum_ack3_5+1;
+     end
+ end
+ 
+%3个载波     
+ for i=1:12
+     if Rxinput_b3(i)==bit_sourse3(i)
+        sum_ack3_3=sum_ack3_3+1;
+     end
+ end
+
+%4个载波
+ for i=1:16
+     if Rxinput_b3(i)==bit_sourse3(i)
+        sum_ack3_4=sum_ack3_4+1;
+     end
+ end
+ 
+%5个载波
+ for i=1:length(bit_sourse3)
+     if Rxinput_b3(i)==bit_sourse3(i)
+        sum_ack3_5=sum_ack3_5+1;
+     end
+ end
+     
+end
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ 
+%  %统计方法二的误块率
+ n_ack=n_ack/1000;
+ BLER_ack(ii)=1-n_ack;
+ 
+ n_ack3_2=n_ack3_2/1000;
+ BLER_ack3_2(ii)=1-n_ack3_2;
+ 
+ n_ack3_3=n_ack3_3/1000;
+ BLER_ack3_3(ii)=1-n_ack3_3;
+ 
+ n_ack3_4=n_ack3_4/1000;
+ BLER_ack3_4(ii)=1-n_ack3_4;
+ 
+ n_ack3_5=n_ack3_5/1000;
+ BLER_ack3_5(ii)=1-n_ack3_5;
+ ii=ii+1;
+ end
+ format long;
+ 
+ figure(cell_BER_plot_figure);
+ semilogy (SNR_dB,BLER_ack,'-*r');
+ 
+ hold on
+ semilogy (SNR_dB,BLER_ack3_2,'-ob');
+ hold off 
+ 
+ hold on
+ semilogy (SNR_dB,BLER_ack3_3,'-.g');
+ hold off
+ 
+ hold on
+ semilogy (SNR_dB,BLER_ack3_4,':b');
+ hold off
+ 
+ hold on
+ semilogy (SNR_dB,BLER_ack3_5,'--g');    
+ grid on;
+ xlabel('信噪比(db)');
+ ylabel('误块率(db)');
+ legend('LTE 单载波PUCCH1b','LTE-A两个载波PUCCH3','LTE-A三个载波PUCCH3','LTE-A四个载波PUCCH3','LTE-A五载波PUCCH3')
+ hold off  
+% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ 
+%%吞吐量
+ SUM_ack(ii)=sum_ack;
+ 
+ SUM_ack3_2(ii)=sum_ack3_2;
+ 
+ SUM_ack3_3(ii)=sum_ack3_3;
+ 
+ SUM_ack3_4(ii)=sum_ack3_4;
+ 
+ SUM_ack3_5(ii)=sum_ack3_5;
+ ii=ii+1;
+ end
+ format long;
+ 
+ figure(cell_SUM_plot_figure);
+ semilogy (SNR_dB,SUM_ack,'-*r');
+ 
+ hold on
+ semilogy (SNR_dB,SUM_ack3_2,'-ob');
+ hold off 
+ 
+ hold on
+ semilogy (SNR_dB,SUM_ack3_3,'-.g');
+ hold off
+ 
+ hold on
+ semilogy (SNR_dB,SUM_ack3_4,':b');
+ hold off
+ 
+ hold on
+ semilogy (SNR_dB,SUM_ack3_5,'--g');    
+ grid on;
+ xlabel('信噪比(db)');
+ ylabel('吞吐量(db)');
+ legend('LTE 单载波PUCCH1b','LTE-A两个载波PUCCH3','LTE-A三个载波PUCCH3','LTE-A四个载波PUCCH3','LTE-A五载波PUCCH3')
+ hold off
+ 
+ 
+%=========================OK=============================

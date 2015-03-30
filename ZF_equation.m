@@ -1,0 +1,56 @@
+function re_data = ZF_equation(descfdma,H_data,pucch_type)
+global SYMBOL_L_SEQ;
+global SYMBOL_L_SEQ_2;
+%global pucch_type;
+global CPflag;
+global ackNackSRS_SimuTran;
+[M,N] = size(descfdma);
+re_data1 = descfdma./H_data;%包括导频
+if pucch_type < 3                    %1/1a/1b
+    if CPflag == 0   
+        D = 4;%数据符号数
+        L = 7;%scfdma符号数
+        for i = 1:2
+    re_data(:,(i-1)*D+1) = re_data1(:,(i-1)*L+1);%去除导频
+    re_data(:,(i-1)*D+2) = re_data1(:,(i-1)*L+2);
+    re_data(:,(i-1)*D+3) = re_data1(:,(i-1)*L+L-1);
+    re_data(:,(i-1)*D+4) = re_data1(:,(i-1)*L+L-2);
+        end
+    else
+        D = 4;%数据符号数
+        L = 6;%scfdma符号数
+        for i = 1:2
+    re_data(:,(i-1)*D+1) = re_data1(:,(i-1)*L+1);%去除导频
+    re_data(:,(i-1)*D+2) = re_data1(:,(i-1)*L+2);
+    re_data(:,(i-1)*D+3) = re_data1(:,(i-1)*L+L-1);
+    re_data(:,(i-1)*D+4) = re_data1(:,(i-1)*L+L-2);
+        end 
+    end
+    if ackNackSRS_SimuTran ==1
+       re_data(:,2*D) = [];
+    end
+else                                        %2/2a/2b
+    if CPflag == 0        
+        D = 5;%数据符号数
+        L = 7;%scfdma符号数
+        for i = 1:2
+    re_data(:,(i-1)*D+1) = re_data1(:,(i-1)*L+1);%去除导频
+    re_data(:,(i-1)*D+2) = re_data1(:,(i-1)*L+3);
+    re_data(:,(i-1)*D+3) = re_data1(:,(i-1)*L+4);
+    re_data(:,(i-1)*D+4) = re_data1(:,(i-1)*L+5);
+    re_data(:,(i-1)*D+5) = re_data1(:,(i-1)*L+7);
+        end
+    else%格式2
+        D = 5;%数据符号数
+        L = 6;%scfdma符号数
+        for i = 1:2
+    re_data(:,(i-1)*D+1) = re_data1(:,(i-1)*L+1);%去除导频
+    re_data(:,(i-1)*D+2) = re_data1(:,(i-1)*L+2);
+    re_data(:,(i-1)*D+3) = re_data1(:,(i-1)*L+3);
+    re_data(:,(i-1)*D+4) = re_data1(:,(i-1)*L+5);
+    re_data(:,(i-1)*D+5) = re_data1(:,(i-1)*L+6);
+        end
+    end
+end
+%======================================================
+    

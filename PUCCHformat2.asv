@@ -1,0 +1,54 @@
+function z=PUCCHformat2(input_b,N_cell_ID,n_RNTI,subframe_N)
+%生成PUCCH格式2，2a,2b,符号Z
+global SYMBOL_L_SEQ_2;
+global CPflag;
+global Delta_PUCCH_shift;
+global n_1_PUCCH;
+global PUCCHN_1_cs;
+global N_RB_sc;
+global n_2_PUCCH;
+global N_2_RB;
+global PUCCHn_1;
+N_PUCCH_seq = 12;
+
+input_b_len=length(input_b);
+%input_b_len_slot=input_b_len/2;
+i=0;
+j=0;
+k=0;
+PUCCHn_1=zeros(1,20);
+RandomSeqCinite=(floor(subframe_N) + 1) * (2 * N_cell_ID + 1) * 2^16 + n_RNTI;
+c=GenRandomSeq(input_b_len, RandomSeqCinite);
+for i=1:input_b_len           %直接加扰20个比特
+        input_b1(i)=mod((input_b(i)+c(i)),2); % scrambling b(i),resulting in a block of scrambled bits b1(0),...b1(numbits-1)
+end
+
+input_d = qpsk_mod(input_b1,input_b_len);   %调制
+
+for j=1:2
+    n_s = subframe_N*2 + j-1;
+      if j==1
+         u=25;
+      else
+         u=0;
+      end
+    
+    %c = pseudo(input_b_len_slot,n_RNTI,N_cell_ID,n_s); % Pseudo-random sequences c(i) generation   
+    for k=1:5                 %每个时隙生成5个符号信息
+        l=SYMBOL_L_SEQ_2(CPflag+1,k);  
+        TxPUCCHn_cell_cs=TxPUCCHCaln_cell_cs(n_s,l,CPflag,N_cell_ID);
+        PUCCHAlpha2=PUCCHGenAlpha2(n_2_PUCCH,n_s,N_RB_sc,N_2_RB,PUCCHN_1_cs,TxPUCCHn_cell_cs,l);
+        %alpha = 2 * pi * 4/12;
+
+        M_RS_sc = N_RB_sc;
+        r_alpha_u_v = rsgenforPUCCH(PUCCHAlpha2,u,M_RS_sc) ;  %生成r_alpha_u_v序列
+
+        %生成Z序列
+        n=5*(j-1)+k;
+        for ii = 1 : N_RB_sc
+            z_index = N_PUCCH_seq * ( n - 1) + (ii - 1);  %序号
+            temp = input_d(n) * r_alpha_u_v(ii);       %元素值
+            z(z_index + 1) = temp;
+        end
+    end
+end

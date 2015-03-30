@@ -1,0 +1,6 @@
+function re_data = receivedata(descfdma,H_data)
+global SYMBOL_L_SEQ;
+global SYMBOL_L_SEQ_2;
+[M,N] = size(descfdma);
+re_data = zeros(M,N);
+    re_data = descfdma./H_data;

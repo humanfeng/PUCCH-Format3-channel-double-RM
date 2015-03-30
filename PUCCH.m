@@ -1,0 +1,67 @@
+clc;
+clear;
+global SYMBOL_L_SEQ;
+global SYMBOL_L_SEQ_2;
+global CPflag;
+global Delta_PUCCH_shift;
+global n_1_PUCCH;
+global PUCCHN_1_cs;
+global N_RB_sc;
+global N_cell_ID;
+global n_RNTI;
+global n_2_PUCCH;
+global N_2_RB;
+global input_d_10;
+global ackNackSRS_SimuTran
+SYMBOL_L_SEQ=[0 1 5 6;0 1 4 5];%在1/1a/1b情况下，常规/扩展CP需要计算的符号数
+SYMBOL_L_SEQ_2=[0 2 3 4 6;0 1 2 4 5 ];%在2/2a/2b情况下，常规/扩展CP需要计算的符号数
+CPflag=0;
+Delta_PUCCH_shift = 1;         %与发送端TxDelta_PUCCH_shift一样
+n_1_PUCCH = 289;                 %用于传输PUCCH格式1/1a/1b的非负资源序号          
+PUCCHN_1_cs = 5;                %表示1/1a/1b与2/2a/2b混合使用时，格式1/1a/1b 中的循环移位数  
+N_RB_sc = 12;                       %频域上资源块的大小，子载波数
+N_cell_ID = 11;
+n_RNTI = 256;
+N_2_RB = 10;                         %每一个时隙中预留给PUCCH格式2/2a/2b传输的资源块数目
+n_2_PUCCH = 100;                %用于传输PUCCH格式2/2a/2b的非负资源序号                     
+ackNackSRS_SimuTran = 1;   %是否允许同时发送PUCCH与SRS
+Deta_ss = 0;                           %由高层给定，用于求PUSCH基序列移位模式（sequence-shift pattern）
+N_PUCCH_seq=12;
+M_RS_sc = N_PUCCH_seq;        %PUCCH的DMRS生成
+Group_hopping_enabled = 1;       %用于决定序列是否组跳频
+Sequence_hopping_enabled = 1; %用于决定是否序列跳频
+subframe_N = 2;
+pucch_tpye = 3;              %PUCCH信息类型
+                                      %0:format1; 
+                                      %1:format1a; 
+                                      %2:format1b; 
+                                      %3:format2;
+									  %4:format2a;
+									  %5:format2b
+%PUCCHn_1(1)=0;
+if pucch_tpye < 3                  %属于格式1/1a/1b 
+    numbits = 1;                     %格式1/1a；numbits=2;%格式1a/1b
+%input_b = randint(1,numbits);% 随机输入序列，数据为0或1；
+    input_b = 1;                      %input_b=[0 1];
+    z = PUCCHformat1(input_b,N_cell_ID,n_RNTI,subframe_N,pucch_tpye,ackNackSRS_SimuTran);
+    Z=PUCCHDMRS(pucch_tpye,N_cell_ID,n_RNTI,subframe_N);
+    
+    Rxinput_b = dePUCCHformat1(z,N_cell_ID,n_RNTI,subframe_N,pucch_tpye);
+    input_b 
+    Rxinput_b
+else                                        %属于格式2/2a/2b 
+    numbits = 7;
+    input_b = randint(1,numbits);  % 随机输入序列，数据为0或1；
+    %10011000011101100011101000001001
+%     input_b = [1 0 0 1 1 0 0 0 0 1 1 1 0 ];
+    input_d_10=[1 0];%格式2b
+    input_rm_b = RM20encode(input_b);   %调用RM编码（输入数据个数<=13）
+    z = PUCCHformat2(input_rm_b,N_cell_ID,n_RNTI,subframe_N);
+    Z = PUCCHDMRS(pucch_tpye,N_cell_ID,n_RNTI,subframe_N);
+    
+    Rxinput_rm_b = dePUCCHformat2(z,N_cell_ID,n_RNTI,subframe_N);
+    Rxinput_rm_b = 1 - 2*Rxinput_rm_b;  %rm译码需要双极性化
+    Rxinput_b = FHTrmdecode(Rxinput_rm_b);  % 随机输入序列，数据为0或1；
+    input_b
+    Rxinput_b
+end

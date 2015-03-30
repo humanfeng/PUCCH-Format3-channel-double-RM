@@ -1,0 +1,55 @@
+function bit_receive = qpsk_demod(out_data)  
+% QPSK demodulation
+                     %  modulation scheme:  b1(i) b1(i+1)|     Re     |   Im
+                       %                       0     0   | 1/sqrt(2)  |   1/sqrt(2)
+                       %                       0     1   | 1/sqrt(2)  |  -1/sqrt(2)
+                       %                       1     0   | -1/sqrt(2) |   1/sqrt(2)
+                       %                       1     1   | -1/sqrt(2) |   -1/sqrt(2) 
+% for b1(20) and b1(21),the modulation scheme£º 00£º-1£»01£ºj; 10: -j;  11: 1;
+numbits = 22;
+m = 1:(numbits / 2-1);
+ bit_receive=zeros(1,numbits);                   
+                      
+for m = 1:(numbits / 2-1)
+    s(m) = angle(out_data(m));% the angle of the complex-valued vector in dfinal(m)
+                       %    dfinal(m)=1/sqrt(2)+i*1/sqrt(2),s=0.7854
+                       %    dfinal(m)=1/sqrt(2)-i*1/sqrt(2),s=-0.7854
+                       %    dfinal(m)=-1/sqrt(2)+i*1/sqrt(2),s=2.3562
+                       %    dfinal(m)=-1/sqrt(2)-i*1/sqrt(2),s=-2.3562
+    if s(m) > 0.7 & s(m) < 2   % Judge the range of s
+            bit_receive(2 * m-1) = 0;
+            bit_receive(2 * m) = 0;
+    elseif s(m) < -0.7 & s(m) > -2
+            bit_receive(2 * m-1) = 0;
+            bit_receive(2 * m) = 1;
+    elseif s(m) > 2
+            bit_receive(2 * m-1) = 1;
+            bit_receive(2 * m) = 0;
+    elseif s(m) < -2
+            bit_receive(2 * m-1) = 1;
+            bit_receive(2 * m) = 1;
+    end
+end
+ 
+s1 = angle(out_data(11));% the angle of the complex-valued vector in dfinal(11)
+                       %    dfinal(11)=-1,s=-3.1416
+                       %    dfinal(11)=j,s=1.5078
+                       %    dfinal(11)=-j,s=-1.5078
+                       %    dfinal(11)=-1=,s=1.1977*e-012
+
+%if s1<-3
+    bit_receive(21)=0;
+    bit_receive(22)=0; 
+%elseif s1>1 
+    %bit_receive(21)=0;
+    %bit_receive(22)=1;
+        
+%elseif  s1<0 & s1>-2
+    %bit_receive(21)=1;
+     %bit_receive(22)=0; 
+%elseif s1>0 & s1<0.01
+     %bit_receive(21)=1;
+     %bit_receive(22)=1;
+%end
+
+ size(bit_receive)

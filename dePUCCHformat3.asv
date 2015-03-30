@@ -1,0 +1,110 @@
+function Rxinput_b = dePUCCHformat3(z,N_cell_ID,n_RNTI,subframe_N)
+%生成PUCCH格式1，1a,1b,符号Z
+%z_len=length(z);
+global CPflag;
+global N_RB_sc;
+global ackNackSRS_SimuTran;
+global n_3_PUCCH;
+global SYMBOL_L_SEQ_2;
+global N_port;
+input_b=zeros(1,12);
+d_temp1=zeros(1,12);
+RxPUCCHd=zeros(1,24);
+B=4*N_RB_sc;
+
+for jj=1:2
+    sum_input_b=zeros(1,12);
+     % 求N_PUCCH_SF
+      if( jj==2 && ackNackSRS_SimuTran == 1)
+          N_PUCCH_SF = 4;
+      else 
+          N_PUCCH_SF = 5;
+      end
+     if(ackNackSRS_SimuTran == 1)
+          N_PUCCH_SF1= 4;
+     else 
+          N_PUCCH_SF1= 5;
+     end
+      % 根据N_PUCCH_SF求 w_n_oc
+      if N_PUCCH_SF == 4
+        w_n_oc = [1 1 1 1 ;1 -1 1 -1 ;1 1 -1 -1;1 -1 -1 1];
+      else
+        w_n_oc =[1 1 1 1 1
+                 1 exp(1j*2*pi/5) exp(1j*4*pi/5)  exp(1j*6*pi/5) exp(1j*8*pi/5)
+                 1 exp(1j*4*pi/5) exp(1j*8*pi/5)  exp(1j*2*pi/5) exp(1j*6*pi/5)
+                 1 exp(1j*6*pi/5) exp(1j*2*pi/5)  exp(1j*8*pi/5) exp(1j*4*pi/5)
+                 1 exp(1j*8*pi/5) exp(1j*6*pi/5)  exp(1j*4*pi/5) exp(1j*2*pi/5)];
+      end      
+      %选择每个时隙对应的U值
+      if jj==1
+         u=25;
+      else
+         u=0;
+      end
+ n_s = subframe_N*2 + jj-1;
+%     if Group_hopping_enabled==0
+%         f_gh=0;
+%     else
+%         f_gh=TxPUCCHCalf_gh(n_s,N_cell_ID);
+%     end
+%     u=mod(f_gh+mod(N_cell_ID,30),30);
+       if (jj == 1)                                               
+	       PUCCH3n_oc(1) = mod(n_3_PUCCH,N_PUCCH_SF1);
+       elseif (jj == 2)                                                          %扩展CP类型
+	       if(N_PUCCH_SF1==5)
+	           PUCCH3n_oc(2) =mod(3*PUCCH3n_oc(1),N_PUCCH_SF1);
+           else
+	           PUCCH3n_oc(2) =mod(PUCCH3n_oc(1),N_PUCCH_SF1);      
+           end
+        end
+    if N_PUCCH_SF == 5
+        n_oc=PUCCH3n_oc(1);
+    else
+        n_oc=PUCCH3n_oc(2);
+    end    
+    for k=1:N_PUCCH_SF
+        l=SYMBOL_L_SEQ_2(CPflag+1,k);
+        TxPUCCHn_cell_cs=TxPUCCHCaln_cell_cs(n_s,l,CPflag,N_cell_ID);
+        n=5*(jj-1)+k-1;
+        n_=mod(n,5);
+        w_n_oc_conj = conj(w_n_oc(n_oc,n_+1));             %求共轭
+        y_n_(:,n+1) = ifft(z(n* N_RB_sc+1:(n+1)* N_RB_sc),N_RB_sc)*sqrt(N_port)*sqrt(N_RB_sc)/N_RB_sc;       %y = z/(s*w)=z*conj(s)*conj(w)           
+        for ii=0:N_RB_sc-1
+           temp=mod(ii+TxPUCCHn_cell_cs,N_RB_sc);
+           y_n(ii+1,n+1)=y_n_(temp+1,n+1);
+        end
+     %*****************************************************  
+        for kk=1:N_RB_sc
+              input_b(kk)=y_n(kk,n+1)*w_n_oc_conj*exp(-1j*pi*(floor(TxPUCCHn_cell_cs/ 64)/2));
+              sum_input_b(kk)=sum_input_b(kk)+input_b(kk);
+        end      
+    end
+    d_temp=sum_input_b/N_PUCCH_SF;
+    if(jj==1)
+       RxPUCCHd1=d_temp;
+    end
+    if(jj==2)
+       RxPUCCHd2=d_temp;
+    end
+end
+RxPUCCHd=[RxPUCCHd1 RxPUCCHd2];
+
+
+%解调制
+Rxinput_b1 = PUCCH_qpsk_demod(RxPUCCHd);
+Rxinput_b1_len = length(Rxinput_b1);            %求长度
+RandomSeqCinite = (floor(n_s / 2) + 1) * (2 * N_cell_ID + 1) * 2^16 + n_RNTI;
+c = GenRandomSeq(Rxinput_b1_len, RandomSeqCinite);
+   for i=1:Rxinput_b1_len
+        Rxinput_b(i)=mod((Rxinput_b1(i)+c(i)),2);
+   end
+
+%        jj=1;
+%  for ii = 1:4:B
+%      RM_bit_part1(jj)=Rxinput_b(ii);
+%      RM_bit_part1(jj+1)=Rxinput_b(ii+1);
+%      RM_bit_part2(jj)=Rxinput_b(ii+2);
+%      RM_bit_part2(jj+1)=Rxinput_b(ii+3);
+%      jj=jj+2;
+%  end
+

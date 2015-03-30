@@ -1,0 +1,11 @@
+clc
+N_RB_sc=12;
+for PUCCHn_cs=0:11
+    alpha=2 * pi * PUCCHn_cs/N_RB_sc;
+    for n=1:12
+        r2_alpha_u_v(PUCCHn_cs+1,n)=exp(j * alpha * (n - 1));
+        r2_alpha_u_v_quantizing{PUCCHn_cs+1,2*n}=
+        r2_alpha_u_v_quantizing{PUCCHn_cs+1,n}= quantizing(r2_alpha_u_v(PUCCHn_cs+1,n));
+    end
+end
+r2_alpha_u_v
